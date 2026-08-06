@@ -84,7 +84,7 @@ main{width:100%;max-width:960px;padding:0 16px 40px;display:grid;grid-template-c
 .history-item{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:8px;margin-bottom:4px;background:var(--surface2);border:1px solid var(--border);font-size:.78rem;transition:background .15s}
 .history-item:hover{background:#22223a}
 .history-item-left{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
-.history-item-name{font-size:.7rem;color:var(--accent);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-item-name{font-size:.7rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .history-item-expr{font-size:.72rem;color:var(--muted);direction:ltr;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .history-item-result{font-family:'Orbitron',sans-serif;font-size:.85rem;font-weight:700;direction:ltr;white-space:nowrap;margin-right:8px}
 .history-item-result.pos{color:var(--green)}
@@ -123,6 +123,26 @@ main{width:100%;max-width:960px;padding:0 16px 40px;display:grid;grid-template-c
 
 /* ── RECONNECT BANNER ── */
 #reconBanner{display:none;position:fixed;top:0;left:0;right:0;background:rgba(239,68,68,.15);border-bottom:1px solid rgba(239,68,68,.3);text-align:center;padding:10px;font-size:.85rem;color:var(--red);z-index:99}
+
+/* ── 🔥 تأثير الشعلة النارية للمليون 🔥 ── */
+.fire-effect {
+    color: #fff !important;
+    text-shadow: 
+        0 0 5px #ff4500,
+        0 0 10px #ff4500,
+        0 0 15px #ff4500,
+        0 0 20px #ff8c00,
+        0 0 35px #ff8c00,
+        0 0 40px #ff8c00;
+    background: rgba(255, 69, 0, 0.15);
+    padding: 0 8px;
+    border-radius: 12px;
+    animation: firePulse 1.2s infinite alternate;
+}
+@keyframes firePulse {
+    0% { text-shadow: 0 0 5px #ff4500, 0 0 10px #ff4500, 0 0 15px #ff4500; opacity: 0.8; }
+    100% { text-shadow: 0 0 10px #ff4500, 0 0 25px #ff8c00, 0 0 45px #ff8c00, 0 0 60px #ffff00; opacity: 1; }
+}
 </style>
 </head>
 <body>
@@ -229,7 +249,22 @@ let mySavedValue = null; // local saved value with expiry
 let mySavedExpr = null;
 let ignoreMyZero = false; // flag to ignore zero value from server for myself
 
+// 💡 لتخزين ألوان اللاعبين
+const playerColors = {};
+
 localStorage.setItem('arenaId', myId);
+
+// ─── توليد ألوان عشوائية ──────────────────────────────────────────────────
+function getRandomColor() {
+    const colors = [
+        '#ffb3ba', '#ffdfba', '#ffffba', '#baffc9', '#bae1ff',
+        '#f7b7a3', '#e38b75', '#c9a7eb', '#a8d8ea', '#aa96da',
+        '#fcbad3', '#ffdcb8', '#d5f5e3', '#fcf3cf', '#d4efdf',
+        '#d2b4de', '#aed6f1', '#f5b7b1', '#f9e79f', '#a9dfbf',
+        '#fadbd8', '#d5dbdb', '#e8daef', '#d4e6f1', '#fdebd0'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+}
 
 // ─── LOAD MY SAVED VALUE FROM LOCAL STORAGE ──────────────────────────────
 function loadMySavedValue() {
@@ -407,6 +442,10 @@ function connectWS() {
         renderLB(); break;
       case 'join':
         if (leavingTimers[msg.id]) { clearTimeout(leavingTimers[msg.id]); delete leavingTimers[msg.id]; }
+        // 💡 تعيين لون مميز للاعب الجديد
+        if (!playerColors[msg.id]) {
+            playerColors[msg.id] = getRandomColor();
+        }
         // Check if this player was saved (returning within 1 hour)
         if (savedPlayers[msg.id]) {
           players[msg.id] = { 
@@ -514,6 +553,7 @@ function connectWS() {
             delete prevVals[msg.id];
             delete leavingTimers[msg.id];
             delete justReturned[msg.id];
+            delete playerColors[msg.id];
             renderLB();
           }, 60000);
           renderLB();
@@ -555,31 +595,22 @@ function setConn(on) {
 
 // ─── 💡 دالة تنسيق الفواصل للرقم الصافي (بدون علامات) ──────────────────────
 function formatPlainNumber(numStr) {
-  // إذا كان فارغاً أو سالباً، نتعامل معه
   if (!numStr) return numStr;
   let isNegative = false;
   if (numStr.startsWith('-')) {
     isNegative = true;
     numStr = numStr.substring(1);
   }
-  // نقوم بتقسيم الرقم إلى جزء صحيح وجزء عشري (إذا وجد)
   let parts = numStr.split('.');
-  // نضيف الفواصل للجزء الصحيح
   parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  // نعيد تجميع الرقم مع الإشارة
   return (isNegative ? '-' : '') + parts.join('.');
 }
 
 // ─── 💡 دالة تنسيق المعادلة أثناء الكتابة ──────────────────────────────────
 function formatExpression(inputExpr) {
-  // 1. إذا كان النص فارغاً أو مجرد علامة سالب، ارجع كما هو
   if (!inputExpr || inputExpr === '-') return inputExpr;
-  
-  // 2. إذا كان النص يحتوي على أي رموز حسابية (+ - * / ÷ ×)، لا ننسقه لأنها معادلة
   const hasOperators = /[+\-*/÷×]/.test(inputExpr);
   if (hasOperators) return inputExpr;
-
-  // 3. بما أنه مجرد رقم صافي، نقوم بتنسيقه
   return formatPlainNumber(inputExpr);
 }
 
@@ -685,6 +716,7 @@ function renderHistory() {
     const valCls = h.result>0?'pos':h.result<0?'neg':'';
     const row = document.createElement('div');
     row.className = 'history-item';
+    // 💡 التاريخ أيضاً يستخدم الفواصل الآن
     row.innerHTML = `
       <div class="history-item-left">
         <div class="history-item-name">${esc(h.name)}</div>
@@ -719,12 +751,27 @@ function renderLB() {
     // ── عرض القيمة مع فواصل الآلاف ──
     const valStr = formatWithCommas(val);
 
+    // 💡 الحصول على لون اللاعب
+    const playerColor = playerColors[id] || '#ffffff';
+
+    // 🔥 تحديد ما إذا كان اللاعب قد وصل للمليون لتفعيل الشعلة
+    const isMillionaire = val >= 1000000;
+
     const row = document.createElement('div');
     row.className = 'lb-row'+(dir?' '+dir:'')+(isMe?' me':'')+(isLeaving?' leaving':'');
+    
+    // 💡 بناء اسم اللاعب مع اللون الخاص به، وإضافة تأثير الشعلة (fire-effect) إذا وصل مليون
+    let nameHtml = `<span class="lb-name" style="color: ${playerColor};">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</span>`;
+    
+    // إذا وصل مليون نضيف له كلاس الشعلة
+    if (isMillionaire) {
+      nameHtml = `<span class="lb-name fire-effect" style="color: #fff;">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</span>`;
+    }
+
     row.innerHTML = `
       ${rankHtml}
       <div>
-        <div class="lb-name">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</div>
+        ${nameHtml}
         <div class="lb-expr" dir="ltr">${esc(p.expr||'')}</div>
       </div>
       <div class="lb-value ${valCls}" dir="ltr">${valStr}</div>`;
