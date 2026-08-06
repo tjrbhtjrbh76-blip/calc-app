@@ -249,8 +249,8 @@ let mySavedValue = null; // local saved value with expiry
 let mySavedExpr = null;
 let ignoreMyZero = false; // flag to ignore zero value from server for myself
 
-// 💡 لتخزين ألوان الأطر (Borders) للاعبين
-const playerBorderColors = {};
+// 💡 لتخزين ألوان الأطر (Borders) للاعبين في السجل (History)
+const playerHistoryColors = {};
 
 localStorage.setItem('arenaId', myId);
 
@@ -426,9 +426,6 @@ function connectWS() {
     switch(msg.type) {
       case 'snapshot':
         msg.players.forEach(p => { 
-          // 💡 التأكد من أن اللاعب لديه لون إطار حتى وإن تم تحميله من السيرفر
-          if (!playerBorderColors[p.id]) playerBorderColors[p.id] = getRandomColor();
-
           // If this is me and I have a saved value, restore it
           if (p.id === myId && mySavedValue !== null && mySavedValue !== 0) {
             players[p.id] = { name: p.name, value: mySavedValue, expr: mySavedExpr || '' };
@@ -445,10 +442,6 @@ function connectWS() {
         renderLB(); break;
       case 'join':
         if (leavingTimers[msg.id]) { clearTimeout(leavingTimers[msg.id]); delete leavingTimers[msg.id]; }
-        // 💡 تعيين لون إطار مميز للاعب الجديد
-        if (!playerBorderColors[msg.id]) {
-            playerBorderColors[msg.id] = getRandomColor();
-        }
         // Check if this player was saved (returning within 1 hour)
         if (savedPlayers[msg.id]) {
           players[msg.id] = { 
@@ -556,7 +549,7 @@ function connectWS() {
             delete prevVals[msg.id];
             delete leavingTimers[msg.id];
             delete justReturned[msg.id];
-            delete playerBorderColors[msg.id];
+            delete playerHistoryColors[msg.id]; // حذف لون التاريخ عند مغادرة اللاعب نهائياً
             renderLB();
           }, 60000);
           renderLB();
@@ -775,19 +768,18 @@ function renderHistory() {
   history.forEach(h => {
     const valCls = h.result>0?'pos':h.result<0?'neg':'';
     
-    // 💡 إصلاح الألوان للعمليات (التاريخ):
-    // البحث عن لون اللاعب في قاعدة البيانات
-    let playerColor = playerBorderColors[myId]; // افتراضي
-    // هنا نبحث عن اللون الخاص بهذا الاسم من خلال معرف اللاعب المخزن (أو نقوم بإنشاء لون جديد)
-    // لضمان أن كل اسم في القائمة له لون، سنقوم بإنشاء لون إذا لم يوجد:
-    let randomColorForHistory = getRandomColor();
+    // 💡 الحصول على اللون الخاص بهذا الاسم (أو إنشاء لون جديد وتثبيته)
+    if (!playerHistoryColors[h.name]) {
+        playerHistoryColors[h.name] = getRandomColor();
+    }
+    const historyColor = playerHistoryColors[h.name];
 
     const row = document.createElement('div');
     row.className = 'history-item';
-    // وضع إطار ملون حول الاسم في التاريخ
+    // ✅ وضع إطار ملون على قد الاسم فقط + تثبيت اللون
     row.innerHTML = `
       <div class="history-item-left">
-        <div class="history-item-name" style="border: 2px solid ${randomColorForHistory}; border-radius: 6px; padding: 0 6px; background: rgba(255,255,255,0.03);">${esc(h.name)}</div>
+        <div class="history-item-name" style="display: inline-block; border: 2px solid ${historyColor}; border-radius: 6px; padding: 0 6px; background: rgba(255,255,255,0.03);">${esc(h.name)}</div>
         <div class="history-item-expr" dir="ltr">${formatExpressionPreview(esc(h.expr))}</div>
       </div>
       <div class="history-item-result ${valCls}" dir="ltr">${formatWithCommas(h.result)}</div>`;
@@ -795,7 +787,7 @@ function renderHistory() {
   });
 }
 
-// ─── LEADERBOARD RENDER ──────────────────────────────────────────────────
+// ─── LEADERBOARD RENDER (معدل - بدون ألوان أو إطارات) ──────────────────────
 function renderLB() {
   const entries = Object.entries(players).sort((a,b)=>(b[1].value??0)-(a[1].value??0));
   pCount.textContent = entries.length + ' لاعب';
@@ -818,20 +810,20 @@ function renderLB() {
     
     const valStr = formatWithCommas(val);
 
-    // 💡 الحصول على لون إطار اللاعب (للمتصدرين)
-    if (!playerBorderColors[id]) playerBorderColors[id] = getRandomColor();
-    const playerBorderColor = playerBorderColors[id] || '#ffffff';
-
+    // 🔥 تحديد ما إذا كان اللاعب قد وصل للمليون
     const isMillionaire = val >= 1000000;
 
     const row = document.createElement('div');
     row.className = 'lb-row'+(dir?' '+dir:'')+(isMe?' me':'')+(isLeaving?' leaving':'');
     
+    // 💡 تمت إزالة الإطارات الملونة، فقط لون النص العادي أو تأثير النار للمليون
     let nameHtml = '';
     if (isMillionaire) {
+       // إذا وصل مليون تظهر الشعلة فقط
        nameHtml = `<span class="lb-name fire-effect" style="color: #fff;">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</span>`;
     } else {
-       nameHtml = `<span class="lb-name" style="color: var(--text); border: 2px solid ${playerBorderColor}; border-radius: 8px; padding: 0 8px; background: rgba(255,255,255,0.03);">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</span>`;
+       // عادي جداً بدون أي إطار
+       nameHtml = `<span class="lb-name">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</span>`;
     }
 
     row.innerHTML = `
