@@ -13,19 +13,26 @@ const fs   = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 
+// Railway يمرر المنفذ تلقائياً عبر process.env.PORT
 const PORT = process.env.PORT || 3000;
 
 // ── HTTP: يخدم index.html ──────────────────────────────────────────────────
 const httpServer = http.createServer((req, res) => {
   if (req.url === '/' || req.url === '/index.html') {
+    // نحدد مسار ملف index.html الموجود بجانب السيرفر
     const file = path.join(__dirname, 'index.html');
+    
     if (!fs.existsSync(file)) {
-      res.writeHead(404); res.end('index.html غير موجود بجانب server.js'); return;
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('خطأ: ملف index.html غير موجود بجانب server.js');
+      return;
     }
+    
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     fs.createReadStream(file).pipe(res);
   } else {
-    res.writeHead(404); res.end('Not found');
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Not found');
   }
 });
 
@@ -90,7 +97,8 @@ wss.on('connection', (ws) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
-httpServer.listen(PORT, '0.0.0.0', () => {
+// ملاحظة هامة: تم حذف '0.0.0.0' ليسمح Railway بكشف الخدمة تلقائياً
+httpServer.listen(PORT, () => {
   console.log('\n🧮  حلبة الأرقام — الخادم يعمل\n');
-  console.log(`   http://localhost:${PORT}\n`);
+  console.log(`   الخادم يعمل على المنفذ: ${PORT}\n`);
 });
