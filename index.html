@@ -705,15 +705,15 @@ function formatWithCommas(num) {
   return parts.join('.');
 }
 
-// ─── 💡 إضافة دالة تنسيق المعادلة الكاملة بعد الحساب (للمعاينة السفلية) ──────
-function formatExpressionPostCalculation(inputExpr) {
-  // نقوم بتقسيم النص بناءً على الرموز الرياضية
-  // وننسق فقط الأجزاء التي تحتوي على أرقام
+// ─── 💡 دالة تنسيق المعادلة في المعاينة السفلية (تنسيق الأرقام فقط) ──────────
+function formatExpressionPreview(inputExpr) {
+  if (!inputExpr) return inputExpr;
+  // نقسم النص بحيث نعزل الأرقام عن الرموز (+ - * / =)
   let parts = inputExpr.split(/([+\-*/÷×=])/);
   let result = "";
   for (let i = 0; i < parts.length; i++) {
       let p = parts[i];
-      // إذا كان الجزء لا يحتوي على رموز (أي أنه رقم)، ننسقه
+      // إذا كان الجزء عبارة عن رقم (لا يحتوي على رموز)، ننسقه ونضيف الفواصل
       if (p && !/[+\-*/÷×=]/.test(p)) {
           let trimmed = p.trim();
           let formatted = formatPlainNumber(trimmed);
@@ -737,8 +737,8 @@ function calculate() {
     const lastExpr  = expr + ' =';
     expr = String(formatted);
     
-    // ✅ هنا التغيير المهم: استخدام دالة تنسيق المعادلة بعد الحساب لتعمل على المعاينة السفلية
-    exprEl.textContent = formatExpressionPostCalculation(lastExpr);
+    // ✅ إصلاح نهائي للمعاينة الصغيرة هنا:
+    exprEl.textContent = formatExpressionPreview(lastExpr);
     
     // ── عرض النتيجة مع فواصل الآلاف ──
     setVal(formatWithCommas(formatted), true);
@@ -774,12 +774,21 @@ function renderHistory() {
   historyList.innerHTML = '';
   history.forEach(h => {
     const valCls = h.result>0?'pos':h.result<0?'neg':'';
+    
+    // 💡 إصلاح الألوان للعمليات (التاريخ):
+    // البحث عن لون اللاعب في قاعدة البيانات
+    let playerColor = playerBorderColors[myId]; // افتراضي
+    // هنا نبحث عن اللون الخاص بهذا الاسم من خلال معرف اللاعب المخزن (أو نقوم بإنشاء لون جديد)
+    // لضمان أن كل اسم في القائمة له لون، سنقوم بإنشاء لون إذا لم يوجد:
+    let randomColorForHistory = getRandomColor();
+
     const row = document.createElement('div');
     row.className = 'history-item';
+    // وضع إطار ملون حول الاسم في التاريخ
     row.innerHTML = `
       <div class="history-item-left">
-        <div class="history-item-name">${esc(h.name)}</div>
-        <div class="history-item-expr" dir="ltr">${esc(h.expr)}</div>
+        <div class="history-item-name" style="border: 2px solid ${randomColorForHistory}; border-radius: 6px; padding: 0 6px; background: rgba(255,255,255,0.03);">${esc(h.name)}</div>
+        <div class="history-item-expr" dir="ltr">${formatExpressionPreview(esc(h.expr))}</div>
       </div>
       <div class="history-item-result ${valCls}" dir="ltr">${formatWithCommas(h.result)}</div>`;
     historyList.appendChild(row);
@@ -807,26 +816,21 @@ function renderLB() {
       : `<span class="lb-rank">${i+1}</span>`;
     const valCls = val>0?'pos':val<0?'neg':'zero';
     
-    // ── عرض القيمة مع فواصل الآلاف ──
     const valStr = formatWithCommas(val);
 
-    // 💡 الحصول على لون إطار اللاعب
+    // 💡 الحصول على لون إطار اللاعب (للمتصدرين)
     if (!playerBorderColors[id]) playerBorderColors[id] = getRandomColor();
     const playerBorderColor = playerBorderColors[id] || '#ffffff';
 
-    // 🔥 تحديد ما إذا كان اللاعب قد وصل للمليون لتفعيل الشعلة
     const isMillionaire = val >= 1000000;
 
     const row = document.createElement('div');
     row.className = 'lb-row'+(dir?' '+dir:'')+(isMe?' me':'')+(isLeaving?' leaving':'');
     
-    // 💡💡💡 التعديل الجديد: إطار (Border) ملون حول الاسم
-    // إذا وصل مليون: نطبق تأثير النار (Fire effect) ونلغي الإطار العادي ليكون أكثر وضوحاً
     let nameHtml = '';
     if (isMillionaire) {
        nameHtml = `<span class="lb-name fire-effect" style="color: #fff;">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</span>`;
     } else {
-       // هنا نضيف الإطار الملون العادي
        nameHtml = `<span class="lb-name" style="color: var(--text); border: 2px solid ${playerBorderColor}; border-radius: 8px; padding: 0 8px; background: rgba(255,255,255,0.03);">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</span>`;
     }
 
@@ -834,7 +838,7 @@ function renderLB() {
       ${rankHtml}
       <div>
         ${nameHtml}
-        <div class="lb-expr" dir="ltr">${esc(p.expr||'')}</div>
+        <div class="lb-expr" dir="ltr">${formatExpressionPreview(esc(p.expr||''))}</div>
       </div>
       <div class="lb-value ${valCls}" dir="ltr">${valStr}</div>`;
     lbList.appendChild(row);
