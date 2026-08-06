@@ -426,6 +426,9 @@ function connectWS() {
     switch(msg.type) {
       case 'snapshot':
         msg.players.forEach(p => { 
+          // 💡 التأكد من أن اللاعب لديه لون حتى وإن تم تحميله من السيرفر
+          if (!playerColors[p.id]) playerColors[p.id] = getRandomColor();
+
           // If this is me and I have a saved value, restore it
           if (p.id === myId && mySavedValue !== null && mySavedValue !== 0) {
             players[p.id] = { name: p.name, value: mySavedValue, expr: mySavedExpr || '' };
@@ -609,8 +612,36 @@ function formatPlainNumber(numStr) {
 // ─── 💡 دالة تنسيق المعادلة أثناء الكتابة ──────────────────────────────────
 function formatExpression(inputExpr) {
   if (!inputExpr || inputExpr === '-') return inputExpr;
+  
+  // إذا كانت معادلة تحتوي على علامات، نقوم بتنسيق الأرقام فقط
+  // دون التأثير على العلامات
   const hasOperators = /[+\-*/÷×]/.test(inputExpr);
-  if (hasOperators) return inputExpr;
+  if (hasOperators) {
+     // هنا نقوم بتقسيم المعادلة وتنسيق كل جزء رقمي لوحده
+     // بس للأرقام التي تكون لوحدها (أرقام صريحة)
+     // ليسهل قراءتها بصرياً
+     // نستخدم تعبيراً منتظماً للبحث عن أرقام ليست بعدها علامة مباشرة لتنسيقها
+     let formattedExpr = inputExpr;
+     // تقسيم المعادلة بناءً على العلامات
+     let parts = inputExpr.split(/([+\-*/÷×])/);
+     let result = "";
+     for (let i = 0; i < parts.length; i++) {
+         let p = parts[i];
+         // إذا كان الجزء رقمًا (ليس علامة)، ننسقه
+         if (p && !/[+\-*/÷×]/.test(p)) {
+             // نحاول تنسيق الرقم إذا كان صحيحاً
+             let trimmed = p.trim();
+             let formatted = formatPlainNumber(trimmed);
+             // نعيد المسافات إذا كانت موجودة
+             result += p.replace(trimmed, formatted);
+         } else {
+             result += p;
+         }
+     }
+     return result;
+  }
+
+  // إذا كان مجرد رقم صافي، ننسقه بالكامل
   return formatPlainNumber(inputExpr);
 }
 
@@ -619,9 +650,26 @@ document.getElementById('btnGrid').addEventListener('click', e => {
   const btn = e.target.closest('button');
   if (!btn) return;
 
-  if (btn.dataset.num  !== undefined) { expr += btn.dataset.num; refresh(); return; }
+  // 💡 تحسين إضافة الأرقام: إذا كانت النتيجة 0 ونضغط رقماً، نستبدله
+  if (btn.dataset.num !== undefined) {
+      // إذا كانت الحالية مجرد '0' (بدون نقطة عشرية) نستبدلها
+      if (expr === '0' && !expr.includes('.')) {
+          expr = btn.dataset.num;
+      } else {
+          expr += btn.dataset.num;
+      }
+      refresh(); 
+      return; 
+  }
+
   if (btn.dataset.op   !== undefined) {
-    expr += btn.dataset.op;
+    // 💡 الإضافة التراكمية: إذا الحالية 0 ونضغط +، نبدأ عملية جديدة
+    // نتحقق إذا كانت النتيجة 0 (بدون عمليات سابقة) لنبدأ من الصفر
+    if (expr === '0') {
+        // لا نضيف شيء، ننتظر الرقم التالي
+    } else {
+        expr += btn.dataset.op;
+    }
     refresh(); return;
   }
   switch(btn.dataset.action) {
@@ -633,7 +681,15 @@ document.getElementById('btnGrid').addEventListener('click', e => {
 
 document.addEventListener('keydown', e => {
   if (loginModal.style.display !== 'none') return;
-  if ('0123456789'.includes(e.key)) { expr+=e.key; refresh(); }
+  if ('0123456789'.includes(e.key)) { 
+     // نفس المنطق التراكمي هنا أيضاً
+     if (expr === '0' && e.key !== '.') {
+        expr = e.key;
+     } else {
+        expr += e.key; 
+     }
+     refresh(); 
+  }
   else if (e.key==='+') { expr+='+'; refresh(); }
   else if (e.key==='-') { expr+='−'; refresh(); }
   else if (e.key==='*') { expr+='×'; refresh(); }
@@ -644,7 +700,8 @@ document.addEventListener('keydown', e => {
 });
 
 function refresh() { 
-  exprEl.textContent = expr; 
+  // 💡 الآن المعاينة الصغيرة ستظهر هي الأخرى منسقة بالفواصل
+  exprEl.textContent = formatExpression(expr); 
   setVal(expr || '0', false); 
 }
 
@@ -678,7 +735,8 @@ function calculate() {
     const formatted = +result.toFixed(10);
     const lastExpr  = expr + ' =';
     expr = String(formatted);
-    exprEl.textContent = lastExpr;
+    // 💡 المعاينة الصغيرة تظهر معادلة منسقة (في نفس الخطوة)
+    exprEl.textContent = formatExpression(lastExpr);
     
     // ── عرض النتيجة مع فواصل الآلاف ──
     setVal(formatWithCommas(formatted), true);
@@ -751,7 +809,8 @@ function renderLB() {
     // ── عرض القيمة مع فواصل الآلاف ──
     const valStr = formatWithCommas(val);
 
-    // 💡 الحصول على لون اللاعب
+    // 💡 الحصول على لون اللاعب (إذا لم يكن لديه لون، يتم توليد واحد الآن)
+    if (!playerColors[id]) playerColors[id] = getRandomColor();
     const playerColor = playerColors[id] || '#ffffff';
 
     // 🔥 تحديد ما إذا كان اللاعب قد وصل للمليون لتفعيل الشعلة
