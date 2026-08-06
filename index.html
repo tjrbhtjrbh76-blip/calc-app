@@ -593,6 +593,17 @@ function setVal(v, colored) {
   }
 }
 
+// ── 💡 دالة جديدة لعرض الأرقام بفواصل الآلاف ──────────────────────────────
+function formatWithCommas(num) {
+  if (num === undefined || num === null || isNaN(num)) return '0';
+  // نقوم بتقسيم العدد إلى جزء صحيح وجزء عشري
+  let parts = String(num).split('.');
+  // نضيف الفواصل للجزء الصحيح
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  // نعيد دمجها
+  return parts.join('.');
+}
+
 function calculate() {
   if (!expr.trim()) return;
   try {
@@ -605,7 +616,9 @@ function calculate() {
     const lastExpr  = expr + ' =';
     expr = String(formatted);
     exprEl.textContent = lastExpr;
-    setVal(String(formatted), true);
+    
+    // ── عرض النتيجة مع فواصل الآلاف ──
+    setVal(formatWithCommas(formatted), true);
 
     // Save my value locally with 1-hour expiry
     saveMyValue(formatted, lastExpr);
@@ -645,7 +658,7 @@ function renderHistory() {
         <div class="history-item-name">${esc(h.name)}</div>
         <div class="history-item-expr" dir="ltr">${esc(h.expr)}</div>
       </div>
-      <div class="history-item-result ${valCls}" dir="ltr">${h.result}</div>`;
+      <div class="history-item-result ${valCls}" dir="ltr">${formatWithCommas(h.result)}</div>`;
     historyList.appendChild(row);
   });
 }
@@ -670,7 +683,9 @@ function renderLB() {
       ? '<span class="lb-rank gold">🥇</span>'
       : `<span class="lb-rank">${i+1}</span>`;
     const valCls = val>0?'pos':val<0?'neg':'zero';
-    const valStr = Number.isInteger(val) ? val.toLocaleString('ar') : parseFloat(val.toFixed(6)).toLocaleString('ar');
+    
+    // ── عرض القيمة مع فواصل الآلاف ──
+    const valStr = formatWithCommas(val);
 
     const row = document.createElement('div');
     row.className = 'lb-row'+(dir?' '+dir:'')+(isMe?' me':'')+(isLeaving?' leaving':'');
