@@ -705,6 +705,26 @@ function formatWithCommas(num) {
   return parts.join('.');
 }
 
+// ─── 💡 إضافة دالة تنسيق المعادلة الكاملة بعد الحساب (للمعاينة السفلية) ──────
+function formatExpressionPostCalculation(inputExpr) {
+  // نقوم بتقسيم النص بناءً على الرموز الرياضية
+  // وننسق فقط الأجزاء التي تحتوي على أرقام
+  let parts = inputExpr.split(/([+\-*/÷×=])/);
+  let result = "";
+  for (let i = 0; i < parts.length; i++) {
+      let p = parts[i];
+      // إذا كان الجزء لا يحتوي على رموز (أي أنه رقم)، ننسقه
+      if (p && !/[+\-*/÷×=]/.test(p)) {
+          let trimmed = p.trim();
+          let formatted = formatPlainNumber(trimmed);
+          result += p.replace(trimmed, formatted);
+      } else {
+          result += p;
+      }
+  }
+  return result;
+}
+
 function calculate() {
   if (!expr.trim()) return;
   try {
@@ -716,7 +736,9 @@ function calculate() {
     const formatted = +result.toFixed(10);
     const lastExpr  = expr + ' =';
     expr = String(formatted);
-    exprEl.textContent = formatExpression(lastExpr);
+    
+    // ✅ هنا التغيير المهم: استخدام دالة تنسيق المعادلة بعد الحساب لتعمل على المعاينة السفلية
+    exprEl.textContent = formatExpressionPostCalculation(lastExpr);
     
     // ── عرض النتيجة مع فواصل الآلاف ──
     setVal(formatWithCommas(formatted), true);
