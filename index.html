@@ -577,3 +577,172 @@ function formatExpression(inputExpr) {
   
   // 2. إذا كان النص يحتوي على أي رموز حسابية (+ - * / ÷ ×)، لا ننسقه لأنها معادلة
   const hasOperators = /[+\-*/÷×]/.test(inputExpr);
+  if (hasOperators) return inputExpr;
+
+  // 3. بما أنه مجرد رقم صافي، نقوم بتنسيقه
+  return formatPlainNumber(inputExpr);
+}
+
+// ─── CALCULATOR LOGIC ────────────────────────────────────────────────────
+document.getElementById('btnGrid').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+
+  if (btn.dataset.num  !== undefined) { expr += btn.dataset.num; refresh(); return; }
+  if (btn.dataset.op   !== undefined) {
+    expr += btn.dataset.op;
+    refresh(); return;
+  }
+  switch(btn.dataset.action) {
+    case 'clear': expr=''; setVal('0',false); exprEl.textContent=''; break;
+    case 'back':  expr=expr.slice(0,-1); refresh(); break;
+    case 'calc':  calculate(); break;
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (loginModal.style.display !== 'none') return;
+  if ('0123456789'.includes(e.key)) { expr+=e.key; refresh(); }
+  else if (e.key==='+') { expr+='+'; refresh(); }
+  else if (e.key==='-') { expr+='−'; refresh(); }
+  else if (e.key==='*') { expr+='×'; refresh(); }
+  else if (e.key==='/') { e.preventDefault(); expr+='÷'; refresh(); }
+  else if (e.key==='Enter' || e.key==='=') calculate();
+  else if (e.key==='Backspace') { expr=expr.slice(0,-1); refresh(); }
+  else if (e.key==='Escape') { expr=''; setVal('0',false); exprEl.textContent=''; }
+});
+
+function refresh() { 
+  exprEl.textContent = expr; 
+  setVal(expr || '0', false); 
+}
+
+function setVal(v, colored) {
+  // هنا نضيف التنسيق أثناء العرض (بدون تغيير القيمة الحقيقية للحساب في المتغير expr)
+  valEl.textContent = formatExpression(v);
+  
+  valEl.className   = 'display-value';
+  if (colored) {
+    const n = parseFloat(v);
+    if (!isNaN(n)) valEl.classList.add(n>0?'pos':n<0?'neg':'');
+  }
+}
+
+// ── دالة لعرض الأرقام بفواصل الآلاف بعد الحساب ──────────────────────────────
+function formatWithCommas(num) {
+  if (num === undefined || num === null || isNaN(num)) return '0';
+  let parts = String(num).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+}
+
+function calculate() {
+  if (!expr.trim()) return;
+  try {
+    const safe = expr.replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-')
+                     .replace(/[^0-9+\-*/.()%\s]/g,'');
+    // eslint-disable-next-line no-new-func
+    const result = Function('"use strict";return('+safe+')')();
+    if (!isFinite(result)) throw 0;
+    const formatted = +result.toFixed(10);
+    const lastExpr  = expr + ' =';
+    expr = String(formatted);
+    exprEl.textContent = lastExpr;
+    
+    // ── عرض النتيجة مع فواصل الآلاف ──
+    setVal(formatWithCommas(formatted), true);
+
+    // Save my value locally with 1-hour expiry
+    saveMyValue(formatted, lastExpr);
+    ignoreMyZero = false;
+
+    // Add to history with name
+    const historyKey = myId + '|' + lastExpr + '|' + formatted;
+    if (!knownExprs.has(historyKey)) {
+      knownExprs.add(historyKey);
+      history.unshift({ name: myName, expr: lastExpr, result: formatted });
+      if (history.length > 10) history.length = 10;
+      saveHistory();
+      renderHistory();
+    }
+
+    // Update local & broadcast
+    players[myId] = { name:myName, value:formatted, expr:lastExpr };
+    renderLB();
+    send({ type:'calc', value:formatted, expr:lastExpr });
+  } catch {
+    setVal('خطأ', false);
+    expr = '';
+    setTimeout(()=>setVal('0',false), 1200);
+  }
+}
+
+// ─── HISTORY RENDER ──────────────────────────────────────────────────────
+function renderHistory() {
+  if (!history.length) { historyList.innerHTML='<div class="history-empty">لا توجد عمليات بعد…</div>'; return; }
+  historyList.innerHTML = '';
+  history.forEach(h => {
+    const valCls = h.result>0?'pos':h.result<0?'neg':'';
+    const row = document.createElement('div');
+    row.className = 'history-item';
+    row.innerHTML = `
+      <div class="history-item-left">
+        <div class="history-item-name">${esc(h.name)}</div>
+        <div class="history-item-expr" dir="ltr">${esc(h.expr)}</div>
+      </div>
+      <div class="history-item-result ${valCls}" dir="ltr">${formatWithCommas(h.result)}</div>`;
+    historyList.appendChild(row);
+  });
+}
+
+// ─── LEADERBOARD RENDER ──────────────────────────────────────────────────
+function renderLB() {
+  const entries = Object.entries(players).sort((a,b)=>(b[1].value??0)-(a[1].value??0));
+  pCount.textContent = entries.length + ' لاعب';
+  if (!entries.length) { lbList.innerHTML='<div class="lb-empty">لا يوجد لاعبون بعد…</div>'; return; }
+
+  lbList.innerHTML = '';
+  entries.forEach(([id, p], i) => {
+    const isMe = id === myId;
+    const isLeaving = !!leavingTimers[id];
+    const val  = p.value ?? 0;
+    const prev = prevVals[id];
+    let dir = '';
+    if (prev !== undefined && val !== prev) dir = val > prev ? 'up' : 'down';
+    prevVals[id] = val;
+
+    const rankHtml = i===0
+      ? '<span class="lb-rank gold">🥇</span>'
+      : `<span class="lb-rank">${i+1}</span>`;
+    const valCls = val>0?'pos':val<0?'neg':'zero';
+    
+    // ── عرض القيمة مع فواصل الآلاف ──
+    const valStr = formatWithCommas(val);
+
+    const row = document.createElement('div');
+    row.className = 'lb-row'+(dir?' '+dir:'')+(isMe?' me':'')+(isLeaving?' leaving':'');
+    row.innerHTML = `
+      ${rankHtml}
+      <div>
+        <div class="lb-name">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</div>
+        <div class="lb-expr" dir="ltr">${esc(p.expr||'')}</div>
+      </div>
+      <div class="lb-value ${valCls}" dir="ltr">${valStr}</div>`;
+    lbList.appendChild(row);
+    if (dir) setTimeout(()=>row.classList.remove('up','down'), 650);
+  });
+}
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── TOAST ────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  clearTimeout(toastTimer);
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
