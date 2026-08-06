@@ -1,0 +1,12 @@
+{
+  "name": "calc-arena",
+  "version": "1.0.0",
+  "description": "حلبة الأرقام — لعبة حاسبة تنافسية بالزمن الحقيقي",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.20.1"
+  }
+}
