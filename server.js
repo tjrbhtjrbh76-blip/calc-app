@@ -1,104 +1,871 @@
-/**
- * حلبة الأرقام — خادم الشبكة الداخلية
- * ─────────────────────────────────────
- * التشغيل:
- *   npm install ws
- *   node server.js
- *
- * ثم افتح المتصفح على رابط الخادم مباشرة
- */
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حلبة الأرقام</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0a0a0f;
+  --surface:  #111118;
+  --surface2: #1a1a24;
+  --border:   #2a2a3a;
+  --accent:   #f0c040;
+  --accent2:  #e07820;
+  --green:    #22c55e;
+  --red:      #ef4444;
+  --text:     #f0f0f8;
+  --muted:    #6b6b8a;
+  --radius:   14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0}
 
-const http = require('http');
-const fs   = require('fs');
-const path = require('path');
-const { WebSocketServer } = require('ws');
+/* ── HEADER ── */
+header{width:100%;max-width:960px;padding:20px 24px 12px;display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+.logo{font-family:'Orbitron',sans-serif;font-size:1.2rem;font-weight:900;letter-spacing:2px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo span{font-size:.65rem;display:block;letter-spacing:4px;margin-top:-4px;opacity:.7}
+.status-pill{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:6px 14px;font-size:.75rem;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .4s}
+.dot.online{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
+.dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-// Railway يمرر المنفذ تلقائياً عبر process.env.PORT
-const PORT = process.env.PORT || 3000;
+/* ── LOGIN ── */
+#loginModal{position:fixed;inset:0;background:rgba(10,10,15,.95);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(8px)}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:48px 40px;width:min(420px,90vw);text-align:center;animation:slideUp .4s cubic-bezier(.16,1,.3,1)}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.login-icon{font-size:3.5rem;margin-bottom:16px}
+.login-box h2{font-size:1.6rem;font-weight:700;margin-bottom:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.login-box p{color:var(--muted);font-size:.9rem;margin-bottom:28px}
+.login-input{width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:14px 18px;font-family:'Cairo',sans-serif;font-size:1rem;color:var(--text);outline:none;text-align:center;transition:border-color .2s;margin-bottom:14px}
+.login-input:focus{border-color:var(--accent)}
+.login-input::placeholder{color:var(--muted)}
+.login-btn{width:100%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0a0f;font-family:'Cairo',sans-serif;font-size:1rem;font-weight:700;border:none;border-radius:12px;padding:14px;cursor:pointer;transition:opacity .2s,transform .1s}
+.login-btn:hover{opacity:.9}
+.login-btn:active{transform:scale(.98)}
+.login-err{color:var(--red);font-size:.8rem;margin-top:10px;min-height:18px}
 
-// ── HTTP: يخدم index.html ──────────────────────────────────────────────────
-const httpServer = http.createServer((req, res) => {
-  if (req.url === '/' || req.url === '/index.html') {
-    // نحدد مسار ملف index.html الموجود بجانب السيرفر
-    const file = path.join(__dirname, 'index.html');
-    
-    if (!fs.existsSync(file)) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('خطأ: ملف index.html غير موجود بجانب server.js');
-      return;
+/* ── MAIN ── */
+main{width:100%;max-width:960px;padding:0 16px 40px;display:grid;grid-template-columns:1fr 1fr;gap:20px;position:relative;z-index:1}
+@media(max-width:640px){main{grid-template-columns:1fr}}
+
+/* ── CALCULATOR ── */
+.calculator{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column}
+.calc-header{padding:16px 20px 10px;border-bottom:1px solid var(--border)}
+.user-badge{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)}
+.user-badge strong{color:var(--accent);font-weight:700}
+
+/* ✅ صندوق العرض ثابت الحجم */
+.display{background:#080810;margin:12px;border-radius:10px;border:1px solid var(--border);padding:14px 16px;height:90px;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;overflow:hidden;position:relative}
+
+.display-expr{font-size:.82rem;color:var(--muted);min-height:18px;word-break:break-all;text-align:left;direction:ltr;width:100%;margin-bottom:4px}
+.display-value{font-family:'Orbitron',sans-serif;font-weight:700;color:var(--text);letter-spacing:1px;transition:color .3s;direction:ltr;word-break:break-all;text-align:right;width:100%;font-size:2rem}
+.display-value.pos{color:var(--green)}
+.display-value.neg{color:var(--red)}
+
+.buttons{padding:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.btn{background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Cairo',sans-serif;font-size:1.1rem;font-weight:600;height:56px;cursor:pointer;transition:background .12s,transform .1s,box-shadow .12s;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-tap-highlight-color:transparent}
+.btn:hover{background:#22223a;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+.btn:active{transform:scale(.92)}
+.btn.op{background:rgba(240,192,64,.08);color:var(--accent);border-color:rgba(240,192,64,.2);font-size:1.25rem}
+.btn.op:hover{background:rgba(240,192,64,.14)}
+.btn.clear{background:rgba(239,68,68,.1);color:var(--red);border-color:rgba(239,68,68,.25)}
+.btn.clear:hover{background:rgba(239,68,68,.18)}
+.btn.backspace{background:rgba(239,68,68,.06);color:var(--red);border-color:rgba(239,68,68,.15);font-size:.95rem}
+.btn.equals{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0a0f;border:none;font-size:1.4rem;font-weight:900;grid-column:span 2}
+.btn.equals:hover{opacity:.9;box-shadow:0 4px 20px rgba(240,192,64,.35)}
+.btn.zero{grid-column:span 2}
+
+/* ── HISTORY (inside calculator) ── */
+.history-section{border-top:1px solid var(--border);padding:12px 16px;max-height:180px;overflow-y:auto}
+.history-section::-webkit-scrollbar{width:4px}
+.history-section::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.history-section-title{font-size:.75rem;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.history-item{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:8px;margin-bottom:4px;background:var(--surface2);border:1px solid var(--border);font-size:.78rem;transition:background .15s}
+.history-item:hover{background:#22223a}
+.history-item-left{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.history-item-name{font-size:.7rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-item-expr{font-size:.72rem;color:var(--muted);direction:ltr;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-item-result{font-family:'Orbitron',sans-serif;font-size:.85rem;font-weight:700;direction:ltr;white-space:nowrap;margin-right:8px}
+.history-item-result.pos{color:var(--green)}
+.history-item-result.neg{color:var(--red)}
+.history-empty{text-align:center;padding:20px;color:var(--muted);font-size:.75rem}
+
+/* ── LEADERBOARD ── */
+.leaderboard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;overflow:hidden}
+.lb-header{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.lb-title{font-size:1rem;font-weight:700;display:flex;align-items:center;gap:8px}
+.lb-count{background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:2px 10px;font-size:.75rem;color:var(--muted)}
+.lb-list{overflow-y:auto;flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;max-height:520px}
+.lb-list::-webkit-scrollbar{width:4px}
+.lb-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.lb-row{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:10px;transition:background .35s,border-color .35s,transform .2s;cursor:default}
+.lb-row:hover{transform:translateX(-2px)}
+.lb-row.up{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.35);animation:fG .55s ease}
+.lb-row.down{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.35);animation:fR .55s ease}
+.lb-row.me{border-color:rgba(240,192,64,.4)}
+.lb-row.leaving{opacity:.5;border-style:dashed}
+@keyframes fG{0%,100%{background:rgba(34,197,94,.1)}50%{background:rgba(34,197,94,.28)}}
+@keyframes fR{0%,100%{background:rgba(239,68,68,.1)}50%{background:rgba(239,68,68,.28)}}
+.lb-rank{font-family:'Orbitron',sans-serif;font-size:.72rem;font-weight:700;color:var(--muted);text-align:center}
+.lb-rank.gold{color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,.55)}
+.lb-name{font-weight:600;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-expr{font-size:.7rem;color:var(--muted);margin-top:2px;direction:ltr;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-value{font-family:'Orbitron',sans-serif;font-size:.9rem;font-weight:700;direction:ltr;white-space:nowrap}
+.lb-value.pos{color:var(--green)}
+.lb-value.neg{color:var(--red)}
+.lb-value.zero{color:var(--muted)}
+.lb-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:.88rem}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:10px 22px;font-size:.85rem;z-index:200;transition:transform .3s cubic-bezier(.16,1,.3,1);white-space:nowrap;pointer-events:none}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── RECONNECT BANNER ── */
+#reconBanner{display:none;position:fixed;top:0;left:0;right:0;background:rgba(239,68,68,.15);border-bottom:1px solid rgba(239,68,68,.3);text-align:center;padding:10px;font-size:.85rem;color:var(--red);z-index:99}
+
+/* ── 🔥 تأثير الشعلة النارية للمليون 🔥 ── */
+.fire-effect {
+    color: #fff !important;
+    text-shadow: 
+        0 0 5px #ff4500,
+        0 0 10px #ff4500,
+        0 0 15px #ff4500,
+        0 0 20px #ff8c00,
+        0 0 35px #ff8c00,
+        0 0 40px #ff8c00;
+    background: rgba(255, 69, 0, 0.15);
+    padding: 0 8px;
+    border-radius: 12px;
+    animation: firePulse 1.2s infinite alternate;
+}
+@keyframes firePulse {
+    0% { text-shadow: 0 0 5px #ff4500, 0 0 10px #ff4500, 0 0 15px #ff4500; opacity: 0.8; }
+    100% { text-shadow: 0 0 10px #ff4500, 0 0 25px #ff8c00, 0 0 45px #ff8c00, 0 0 60px #ffff00; opacity: 1; }
+}
+</style>
+</head>
+<body>
+
+<div id="reconBanner">⚠️ انقطع الاتصال — جارٍ إعادة الاتصال…</div>
+
+<!-- LOGIN -->
+<div id="loginModal">
+  <div class="login-box">
+    <div class="login-icon">🧮</div>
+    <h2>حلبة الأرقام</h2>
+    <p>تنافس مع زملائك على الشبكة الداخلية بالزمن الحقيقي</p>
+
+    <input id="nameInput" class="login-input" type="text" placeholder="اسمك..." maxlength="20" autocomplete="off">
+
+    <button class="login-btn" id="joinBtn">ادخل الحلبة ⚡</button>
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">CALC ARENA <span>حلبة الأرقام</span></div>
+  <div class="status-pill">
+    <div class="dot" id="connDot"></div>
+    <span id="connLabel">غير متصل</span>
+  </div>
+</header>
+
+<!-- APP -->
+<main id="mainApp" style="display:none">
+
+  <!-- CALCULATOR -->
+  <div class="calculator">
+    <div class="calc-header">
+      <div class="user-badge">👤 <strong id="dispUser">—</strong></div>
+    </div>
+    <div class="display">
+      <div class="display-expr" id="exprEl"></div>
+      <div class="display-value" id="valEl">0</div>
+    </div>
+    <div class="buttons" id="btnGrid">
+      <!-- Row 1 -->
+      <button class="btn clear"     data-action="clear">C</button>
+      <button class="btn backspace" data-action="back">⌫</button>
+      <button class="btn op"        data-op="÷">÷</button>
+      <button class="btn op"        data-op="×">×</button>
+      <!-- Row 2 -->
+      <button class="btn" data-num="9">9</button>
+      <button class="btn" data-num="8">8</button>
+      <button class="btn" data-num="7">7</button>
+      <button class="btn op"        data-op="−" style="grid-row:2/4;grid-column:4;height:auto">−</button>
+      <!-- Row 3 -->
+      <button class="btn" data-num="6">6</button>
+      <button class="btn" data-num="5">5</button>
+      <button class="btn" data-num="4">4</button>
+      <!-- Row 4 -->
+      <button class="btn" data-num="3">3</button>
+      <button class="btn" data-num="2">2</button>
+      <button class="btn" data-num="1">1</button>
+      <button class="btn op"        data-op="+" style="grid-row:4/6;grid-column:4;height:auto">+</button>
+      <!-- Row 5 -->
+      <button class="btn equals" data-action="calc" style="grid-column:1/2">=</button>
+      <button class="btn zero" data-num="0" style="grid-column:2/4">0</button>
+    </div>
+    <!-- HISTORY INSIDE CALCULATOR -->
+    <div class="history-section" id="historySection">
+      <div class="history-section-title">📋 آخر العمليات</div>
+      <div id="historyList">
+        <div class="history-empty">لا توجد عمليات بعد…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div class="leaderboard">
+    <div class="lb-header">
+      <div class="lb-title">🏆 المتصدرون</div>
+      <div class="lb-count" id="pCount">0 لاعب</div>
+    </div>
+    <div class="lb-list" id="lbList">
+      <div class="lb-empty">لا يوجد لاعبون بعد…</div>
+    </div>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────────────────
+let myId   = localStorage.getItem('arenaId')   || 'u_' + Math.random().toString(36).slice(2,10);
+let myName = '';
+let expr   = '';
+let ws     = null;
+let prevVals = {};   // id → last value
+const players = {};  // id → {name, value, expr}
+const history = [];  // {name, expr, result}
+const leavingTimers = {}; // id → timeout
+const savedPlayers = {}; // id → {name, value, expr, savedAt} — saved for 1 hour after leaving
+const justReturned = {}; // id → timestamp — ignore zero updates for 3 seconds after return
+const knownExprs = new Set(); // track expr strings to avoid duplicates
+let mySavedValue = null; // local saved value with expiry
+let mySavedExpr = null;
+let ignoreMyZero = false; // flag to ignore zero value from server for myself
+
+// 💡 لتخزين ألوان الأطر (Borders) للاعبين في السجل (History)
+const playerHistoryColors = {};
+
+localStorage.setItem('arenaId', myId);
+
+// ─── توليد ألوان إطار عشوائية ────────────────────────────────────────────
+function getRandomColor() {
+    const colors = [
+        '#ff6b6b', '#f06595', '#cc5de8', '#845ef7', '#5c7cfa',
+        '#339af0', '#22b8cf', '#20c997', '#51cf66', '#94d82d',
+        '#fcc419', '#ff922b', '#ff6b6b', '#fcc2d7', '#b197fc',
+        '#74c0fc', '#63e6be', '#b2f2bb', '#ffec99', '#ffa94d',
+        '#f783ac', '#9775fa', '#4dabf7', '#38d9a9', '#69db7c'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+}
+
+// ─── LOAD MY SAVED VALUE FROM LOCAL STORAGE ──────────────────────────────
+function loadMySavedValue() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('arenaMyValue'));
+    if (saved && saved.expiresAt && Date.now() < saved.expiresAt) {
+      mySavedValue = saved.value;
+      mySavedExpr = saved.expr;
+      return true;
+    } else {
+      localStorage.removeItem('arenaMyValue');
+      mySavedValue = null;
+      mySavedExpr = null;
+      return false;
     }
-    
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    fs.createReadStream(file).pipe(res);
-  } else {
-    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('Not found');
+  } catch {
+    localStorage.removeItem('arenaMyValue');
+    mySavedValue = null;
+    mySavedExpr = null;
+    return false;
+  }
+}
+
+function saveMyValue(value, expr) {
+  const data = {
+    value: value,
+    expr: expr,
+    expiresAt: Date.now() + (60 * 60 * 1000) // 1 hour
+  };
+  localStorage.setItem('arenaMyValue', JSON.stringify(data));
+  mySavedValue = value;
+  mySavedExpr = expr;
+}
+
+// ─── LOAD SAVED HISTORY FROM LOCAL STORAGE ────────────────────────────────
+function loadSavedHistory() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('arenaHistory'));
+    if (saved && Array.isArray(saved)) {
+      saved.forEach(h => {
+        history.push(h);
+        knownExprs.add(h.name + '|' + h.expr + '|' + h.result);
+      });
+      if (history.length > 10) history.length = 10;
+    }
+  } catch { /* ignore */ }
+}
+
+function saveHistory() {
+  try {
+    localStorage.setItem('arenaHistory', JSON.stringify(history));
+  } catch { /* ignore */ }
+}
+
+loadMySavedValue();
+loadSavedHistory();
+
+// ─── DOM ──────────────────────────────────────────────────────────────────
+const loginModal  = document.getElementById('loginModal');
+const mainApp     = document.getElementById('mainApp');
+const nameInput   = document.getElementById('nameInput');
+const joinBtn     = document.getElementById('joinBtn');
+const loginErr    = document.getElementById('loginErr');
+const connDot     = document.getElementById('connDot');
+const connLabel   = document.getElementById('connLabel');
+const dispUser    = document.getElementById('dispUser');
+const exprEl      = document.getElementById('exprEl');
+const valEl       = document.getElementById('valEl');
+const lbList      = document.getElementById('lbList');
+const pCount      = document.getElementById('pCount');
+const historyList = document.getElementById('historyList');
+const reconBanner = document.getElementById('reconBanner');
+const toastEl     = document.getElementById('toast');
+
+// ─── RESTORE SESSION ──────────────────────────────────────────────────────
+const savedName = localStorage.getItem('arenaName');
+if (savedName) nameInput.value = savedName;
+
+// ─── CLEANUP EXPIRED SAVED PLAYERS ────────────────────────────────────────
+function cleanupSavedPlayers() {
+  const now = Date.now();
+  const oneHour = 60 * 60 * 1000;
+  for (const id in savedPlayers) {
+    if (now - savedPlayers[id].savedAt > oneHour) {
+      delete savedPlayers[id];
+    }
+  }
+}
+
+// ─── RESTORE CALCULATOR DISPLAY ───────────────────────────────────────────
+function restoreCalculatorDisplay() {
+  if (mySavedValue !== null && mySavedValue !== 0) {
+    expr = String(mySavedValue);
+    exprEl.textContent = mySavedExpr || '';
+    setVal(String(mySavedValue), true);
+  }
+}
+
+// ─── LOGIN ────────────────────────────────────────────────────────────────
+joinBtn.addEventListener('click', doJoin);
+nameInput.addEventListener('keydown', e => { if (e.key==='Enter') doJoin(); });
+
+function doJoin() {
+  const name = nameInput.value.trim();
+  if (!name) { loginErr.textContent = 'أدخل اسمك أولاً!'; return; }
+  myName = name;
+  localStorage.setItem('arenaName', name);
+  loginErr.textContent = '';
+  joinBtn.textContent  = 'جارٍ الاتصال…';
+  joinBtn.disabled     = true;
+  // Set flag to ignore zero value from server for myself
+  if (mySavedValue !== null && mySavedValue !== 0) {
+    ignoreMyZero = true;
+  }
+  connectWS();
+}
+
+// ─── WEBSOCKET ───────────────────────────────────────────────────────────
+let reconnectTimer = null;
+let isFirstConnect = true;
+
+function connectWS() {
+  // استخدم نفس الخادم الذي يخدم الصفحة تلقائياً
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const host  = location.hostname || 'localhost';
+  const port  = location.port || (proto === 'wss' ? '443' : '80');
+  const url   = `${proto}://${host}:${port}`;
+  try { ws = new WebSocket(url); } catch(e) { onConnFail(String(e)); return; }
+
+  ws.onopen = () => {
+    clearTimeout(reconnectTimer);
+    setConn(true);
+    reconBanner.style.display = 'none';
+    if (isFirstConnect) {
+      isFirstConnect = false;
+      loginModal.style.display = 'none';
+      mainApp.style.display    = 'grid';
+      dispUser.textContent     = myName;
+      // Restore calculator display and history on first connect
+      restoreCalculatorDisplay();
+      renderHistory();
+    } else {
+      // Restore on reconnect too
+      restoreCalculatorDisplay();
+      renderHistory();
+    }
+    // Set ignore flag if we have saved value
+    if (mySavedValue !== null && mySavedValue !== 0) {
+      ignoreMyZero = true;
+    }
+    send({ type:'join', id:myId, name:myName });
+    joinBtn.textContent = 'ادخل الحلبة ⚡';
+    joinBtn.disabled    = false;
+  };
+
+  ws.onmessage = e => {
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    cleanupSavedPlayers();
+    switch(msg.type) {
+      case 'snapshot':
+        msg.players.forEach(p => { 
+          // If this is me and I have a saved value, restore it
+          if (p.id === myId && mySavedValue !== null && mySavedValue !== 0) {
+            players[p.id] = { name: p.name, value: mySavedValue, expr: mySavedExpr || '' };
+            prevVals[p.id] = mySavedValue;
+            ignoreMyZero = true;
+          } else if (savedPlayers[p.id]) {
+            players[p.id] = { name: p.name, value: savedPlayers[p.id].value, expr: savedPlayers[p.id].expr };
+            justReturned[p.id] = Date.now();
+          } else {
+            players[p.id] = p;
+          }
+          prevVals[p.id] = players[p.id].value;
+        });
+        renderLB(); break;
+      case 'join':
+        if (leavingTimers[msg.id]) { clearTimeout(leavingTimers[msg.id]); delete leavingTimers[msg.id]; }
+        // Check if this player was saved (returning within 1 hour)
+        if (savedPlayers[msg.id]) {
+          players[msg.id] = { 
+            name: msg.name, 
+            value: savedPlayers[msg.id].value, 
+            expr: savedPlayers[msg.id].expr 
+          };
+          prevVals[msg.id] = savedPlayers[msg.id].value;
+          justReturned[msg.id] = Date.now();
+          delete savedPlayers[msg.id];
+          showToast(`👋 ${msg.name} عاد`);
+        } else if (msg.id === myId && mySavedValue !== null && mySavedValue !== 0) {
+          // This is me rejoining, restore my saved value
+          players[msg.id] = { name: msg.name, value: mySavedValue, expr: mySavedExpr || '' };
+          prevVals[msg.id] = mySavedValue;
+          ignoreMyZero = true;
+          restoreCalculatorDisplay();
+        } else if (!players[msg.id]) {
+          showToast(`👋 ${msg.name} انضم`);
+          players[msg.id] = { name:msg.name, value:msg.value, expr:msg.expr };
+          prevVals[msg.id] = msg.value;
+        } else {
+          showToast(`👋 ${msg.name} عاد`);
+        }
+        renderLB(); break;
+      case 'update':
+        if (players[msg.id]) {
+          // If this is me and I'm ignoring zero updates
+          if (msg.id === myId && ignoreMyZero) {
+            if (msg.value === 0 || msg.value === undefined || msg.value === null) {
+              // Keep my saved value
+              if (mySavedValue !== null) {
+                players[msg.id].value = mySavedValue;
+                players[msg.id].expr = mySavedExpr || players[msg.id].expr;
+              }
+              break;
+            } else {
+              // Real value coming from server, accept it
+              ignoreMyZero = false;
+              mySavedValue = msg.value;
+              mySavedExpr = msg.expr;
+              saveMyValue(msg.value, msg.expr);
+            }
+          }
+          // If player just returned within 3 seconds and server sends 0, ignore it
+          if (justReturned[msg.id] && Date.now() - justReturned[msg.id] < 3000) {
+            if (msg.value === 0 || msg.value === undefined) {
+              break;
+            } else {
+              delete justReturned[msg.id];
+            }
+          }
+          // Add to history if expr changed (someone did a calculation)
+          if (msg.expr && players[msg.id].expr !== msg.expr && msg.value !== 0) {
+            const historyKey = msg.id + '|' + msg.expr + '|' + msg.value;
+            if (!knownExprs.has(historyKey)) {
+              knownExprs.add(historyKey);
+              history.unshift({ name: players[msg.id].name, expr: msg.expr, result: msg.value });
+              if (history.length > 10) history.length = 10;
+              saveHistory();
+              renderHistory();
+            }
+          }
+          if (!(msg.id === myId && ignoreMyZero)) {
+            players[msg.id].value = msg.value;
+            players[msg.id].expr = msg.expr;
+          }
+        }
+        renderLB(); break;
+      case 'calc':
+        if (players[msg.id]) {
+          delete justReturned[msg.id];
+          if (msg.id === myId) {
+            ignoreMyZero = false;
+            mySavedValue = msg.value;
+            mySavedExpr = msg.expr;
+            saveMyValue(msg.value, msg.expr);
+          }
+          players[msg.id].value = msg.value;
+          players[msg.id].expr = msg.expr;
+          // Add to shared history
+          const historyKey = msg.id + '|' + msg.expr + '|' + msg.value;
+          if (!knownExprs.has(historyKey)) {
+            knownExprs.add(historyKey);
+            history.unshift({ name: players[msg.id].name, expr: msg.expr, result: msg.value });
+            if (history.length > 10) history.length = 10;
+            saveHistory();
+            renderHistory();
+          }
+          renderLB();
+        }
+        break;
+      case 'leave':
+        if (players[msg.id]) {
+          showToast(`👋 ${players[msg.id].name} غادر`);
+          savedPlayers[msg.id] = {
+            name: players[msg.id].name,
+            value: players[msg.id].value,
+            expr: players[msg.id].expr,
+            savedAt: Date.now()
+          };
+          if (leavingTimers[msg.id]) clearTimeout(leavingTimers[msg.id]);
+          leavingTimers[msg.id] = setTimeout(() => {
+            delete players[msg.id];
+            delete prevVals[msg.id];
+            delete leavingTimers[msg.id];
+            delete justReturned[msg.id];
+            delete playerHistoryColors[msg.id];
+            renderLB();
+          }, 60000);
+          renderLB();
+        }
+        break;
+    }
+  };
+
+  ws.onclose = () => {
+    setConn(false);
+    if (mainApp.style.display !== 'none') {
+      reconBanner.style.display = 'block';
+      scheduleReconnect();
+    } else {
+      onConnFail('فشل الاتصال — تأكد أن الخادم يعمل');
+    }
+  };
+
+  ws.onerror = () => {};
+}
+
+function scheduleReconnect() {
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => connectWS(), 3000);
+}
+
+function onConnFail(msg) {
+  loginErr.textContent = msg || 'فشل الاتصال';
+  joinBtn.textContent  = 'ادخل الحلبة ⚡';
+  joinBtn.disabled     = false;
+}
+
+function send(data) { if (ws && ws.readyState===1) ws.send(JSON.stringify(data)); }
+
+function setConn(on) {
+  connDot.className   = 'dot' + (on ? ' online' : ' error');
+  connLabel.textContent = on ? 'متصل' : 'انقطع الاتصال';
+}
+
+// ─── 💡 دالة تنسيق الفواصل للرقم الصافي (بدون علامات) ──────────────────────
+function formatPlainNumber(numStr) {
+  if (!numStr) return numStr;
+  let isNegative = false;
+  if (numStr.startsWith('-')) {
+    isNegative = true;
+    numStr = numStr.substring(1);
+  }
+  let parts = numStr.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (isNegative ? '-' : '') + parts.join('.');
+}
+
+// ─── 💡 دالة تنسيق المعادلة أثناء الكتابة ──────────────────────────────────
+function formatExpression(inputExpr) {
+  if (!inputExpr || inputExpr === '-') return inputExpr;
+  
+  const hasOperators = /[+\-*/÷×]/.test(inputExpr);
+  if (hasOperators) {
+     let parts = inputExpr.split(/([+\-*/÷×])/);
+     let result = "";
+     for (let i = 0; i < parts.length; i++) {
+         let p = parts[i];
+         if (p && !/[+\-*/÷×]/.test(p)) {
+             let trimmed = p.trim();
+             let formatted = formatPlainNumber(trimmed);
+             result += p.replace(trimmed, formatted);
+         } else {
+             result += p;
+         }
+     }
+     return result;
+  }
+  return formatPlainNumber(inputExpr);
+}
+
+// ─── 💡 إنشاء دالة Debounce لتجنب البطء ──────────────────────────────────
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    const context = this;
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(context, args), wait);
+  };
+}
+
+// ─── CALCULATOR LOGIC ────────────────────────────────────────────────────
+
+// 💡 تطبيق Debounce على التحديث (تأخير 150ms يمنع التقطيع أثناء الكتابة السريعة)
+const debouncedRefresh = debounce(function() {
+  exprEl.textContent = formatExpression(expr); 
+  setVal(expr || '0', false);
+}, 150);
+
+// 💡 تطبيق Debounce على الحساب (ضغطات متكررة على = لا تسبب بطء)
+const debouncedCalculate = debounce(function() {
+  calculateLogic();
+}, 200);
+
+document.getElementById('btnGrid').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+
+  if (btn.dataset.num !== undefined) {
+      if (expr === '0' && btn.dataset.num !== '.') {
+          expr = btn.dataset.num;
+      } else {
+          expr += btn.dataset.num;
+      }
+      debouncedRefresh(); // استدعاء المحدث
+      return; 
+  }
+
+  if (btn.dataset.op   !== undefined) {
+    expr += btn.dataset.op;
+    debouncedRefresh(); // استدعاء المحدث
+    return;
+  }
+
+  switch(btn.dataset.action) {
+    case 'clear': expr=''; setVal('0',false); exprEl.textContent=''; break;
+    case 'back':  expr=expr.slice(0,-1); debouncedRefresh(); break;
+    case 'calc':  debouncedCalculate(); break;
   }
 });
 
-// ── WebSocket ──────────────────────────────────────────────────────────────
-const wss = new WebSocketServer({ server: httpServer });
-
-/** @type {Map<string, {ws, name, value, expr, id}>} */
-const players = new Map();
-
-function broadcast(data) {
-  const msg = JSON.stringify(data);
-  wss.clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
-}
-
-function sendAllPlayers(ws) {
-  const list = [];
-  players.forEach(p => list.push({ id: p.id, name: p.name, value: p.value, expr: p.expr }));
-  ws.send(JSON.stringify({ type: 'snapshot', players: list }));
-}
-
-wss.on('connection', (ws) => {
-  let playerId = null;
-
-  ws.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
-
-    switch (msg.type) {
-
-      case 'join': {
-        playerId = msg.id;
-        players.set(playerId, { ws, id: playerId, name: msg.name, value: 0, expr: '' });
-        console.log(`✅ انضم: ${msg.name} (${playerId})`);
-
-        // أرسل للقادم الجديد لائحة الكل أولاً
-        sendAllPlayers(ws);
-
-        // أخبر الجميع بالقادم الجديد
-        broadcast({ type: 'join', id: playerId, name: msg.name, value: 0, expr: '' });
-        break;
-      }
-
-      case 'calc': {
-        if (!playerId || !players.has(playerId)) return;
-        const p = players.get(playerId);
-        p.value = msg.value;
-        p.expr  = msg.expr;
-        broadcast({ type: 'update', id: playerId, name: p.name, value: msg.value, expr: msg.expr });
-        break;
-      }
-    }
-  });
-
-  ws.on('close', () => {
-    if (playerId && players.has(playerId)) {
-      const name = players.get(playerId).name;
-      players.delete(playerId);
-      console.log(`❌ غادر: ${name}`);
-      broadcast({ type: 'leave', id: playerId });
-    }
-  });
+document.addEventListener('keydown', e => {
+  if (loginModal.style.display !== 'none') return;
+  if ('0123456789'.includes(e.key)) { 
+     if (expr === '0' && e.key !== '.') {
+        expr = e.key;
+     } else {
+        expr += e.key; 
+     }
+     debouncedRefresh(); return;
+  }
+  else if (e.key==='+') { expr+='+'; debouncedRefresh(); return; }
+  else if (e.key==='-') { expr+='−'; debouncedRefresh(); return; }
+  else if (e.key==='*') { expr+='×'; debouncedRefresh(); return; }
+  else if (e.key==='/') { e.preventDefault(); expr+='÷'; debouncedRefresh(); return; }
+  else if (e.key==='Enter' || e.key==='=') debouncedCalculate();
+  else if (e.key==='Backspace') { expr=expr.slice(0,-1); debouncedRefresh(); }
+  else if (e.key==='Escape') { expr=''; setVal('0',false); exprEl.textContent=''; }
 });
 
-// ── Start ──────────────────────────────────────────────────────────────────
-// ملاحظة هامة: تم حذف '0.0.0.0' ليسمح Railway بكشف الخدمة تلقائياً
-httpServer.listen(PORT, () => {
-  console.log('\n🧮  حلبة الأرقام — الخادم يعمل\n');
-  console.log(`   الخادم يعمل على المنفذ: ${PORT}\n`);
-});
+// ─── 💡 دالة تعديل حجم الخط تلقائياً (يبدأ بالتصغير فقط بعد 12 خانة) ──────
+function autoScaleFont(element) {
+    const textLength = element.textContent.length;
+    let fontSize = 2; 
+    if (textLength > 12) {
+        fontSize = 2 - ((textLength - 12) * 0.15);
+    }
+    if (fontSize < 0.8) fontSize = 0.8;
+    element.style.fontSize = fontSize + 'rem';
+}
+
+function setVal(v, colored) {
+  valEl.textContent = formatExpression(v);
+  autoScaleFont(valEl);
+  valEl.className   = 'display-value';
+  if (colored) {
+    const n = parseFloat(v);
+    if (!isNaN(n)) valEl.classList.add(n>0?'pos':n<0?'neg':'');
+  }
+}
+
+// ── دالة لعرض الأرقام بفواصل الآلاف بعد الحساب ──────────────────────────────
+function formatWithCommas(num) {
+  if (num === undefined || num === null || isNaN(num)) return '0';
+  let parts = String(num).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+}
+
+// ─── 💡 دالة تنسيق المعادلة في المعاينة السفلية (تنسيق الأرقام فقط) ──────────
+function formatExpressionPreview(inputExpr) {
+  if (!inputExpr) return inputExpr;
+  let parts = inputExpr.split(/([+\-*/÷×=])/);
+  let result = "";
+  for (let i = 0; i < parts.length; i++) {
+      let p = parts[i];
+      if (p && !/[+\-*/÷×=]/.test(p)) {
+          let trimmed = p.trim();
+          let formatted = formatPlainNumber(trimmed);
+          result += p.replace(trimmed, formatted);
+      } else {
+          result += p;
+      }
+  }
+  return result;
+}
+
+// ─── فصل منطق الحساب عن الاستدعاء المباشر ────────────────────────────────
+function calculateLogic() {
+  if (!expr.trim()) return;
+  try {
+    const safe = expr.replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-')
+                     .replace(/[^0-9+\-*/.()%\s]/g,'');
+    // eslint-disable-next-line no-new-func
+    const result = Function('"use strict";return('+safe+')')();
+    if (!isFinite(result)) throw 0;
+    const formatted = +result.toFixed(10);
+    const lastExpr  = expr + ' =';
+    expr = String(formatted);
+    
+    exprEl.textContent = formatExpressionPreview(lastExpr);
+    
+    // ── عرض النتيجة مع فواصل الآلاف ──
+    setVal(formatWithCommas(formatted), true);
+
+    saveMyValue(formatted, lastExpr);
+    ignoreMyZero = false;
+
+    const historyKey = myId + '|' + lastExpr + '|' + formatted;
+    if (!knownExprs.has(historyKey)) {
+      knownExprs.add(historyKey);
+      history.unshift({ name: myName, expr: lastExpr, result: formatted });
+      if (history.length > 10) history.length = 10;
+      saveHistory();
+      renderHistory();
+    }
+
+    players[myId] = { name:myName, value:formatted, expr:lastExpr };
+    renderLB();
+    send({ type:'calc', value:formatted, expr:lastExpr });
+  } catch {
+    setVal('خطأ', false);
+    expr = '';
+    setTimeout(()=>setVal('0',false), 1200);
+  }
+}
+
+// ─── HISTORY RENDER ──────────────────────────────────────────────────────
+function renderHistory() {
+  if (!history.length) { historyList.innerHTML='<div class="history-empty">لا توجد عمليات بعد…</div>'; return; }
+  historyList.innerHTML = '';
+  history.forEach(h => {
+    const valCls = h.result>0?'pos':h.result<0?'neg':'';
+    
+    if (!playerHistoryColors[h.name]) {
+        playerHistoryColors[h.name] = getRandomColor();
+    }
+    const historyColor = playerHistoryColors[h.name];
+
+    const row = document.createElement('div');
+    row.className = 'history-item';
+    row.innerHTML = `
+      <div class="history-item-left">
+        <div class="history-item-name" style="display: inline-block; border: 2px solid ${historyColor}; border-radius: 6px; padding: 0 6px; background: rgba(255,255,255,0.03);">${esc(h.name)}</div>
+        <div class="history-item-expr" dir="ltr">${formatExpressionPreview(esc(h.expr))}</div>
+      </div>
+      <div class="history-item-result ${valCls}" dir="ltr">${formatWithCommas(h.result)}</div>`;
+    historyList.appendChild(row);
+  });
+}
+
+// ─── LEADERBOARD RENDER ──────────────────────────────────────────────────
+function renderLB() {
+  const entries = Object.entries(players).sort((a,b)=>(b[1].value??0)-(a[1].value??0));
+  pCount.textContent = entries.length + ' لاعب';
+  if (!entries.length) { lbList.innerHTML='<div class="lb-empty">لا يوجد لاعبون بعد…</div>'; return; }
+
+  lbList.innerHTML = '';
+  entries.forEach(([id, p], i) => {
+    const isMe = id === myId;
+    const isLeaving = !!leavingTimers[id];
+    const val  = p.value ?? 0;
+    const prev = prevVals[id];
+    let dir = '';
+    if (prev !== undefined && val !== prev) dir = val > prev ? 'up' : 'down';
+    prevVals[id] = val;
+
+    const rankHtml = i===0
+      ? '<span class="lb-rank gold">🥇</span>'
+      : `<span class="lb-rank">${i+1}</span>`;
+    const valCls = val>0?'pos':val<0?'neg':'zero';
+    
+    const valStr = formatWithCommas(val);
+
+    const isMillionaire = val >= 1000000;
+
+    const row = document.createElement('div');
+    row.className = 'lb-row'+(dir?' '+dir:'')+(isMe?' me':'')+(isLeaving?' leaving':'');
+    
+    let nameHtml = '';
+    if (isMillionaire) {
+       nameHtml = `<span class="lb-name fire-effect" style="color: #fff;">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</span>`;
+    } else {
+       nameHtml = `<span class="lb-name">${isMe?'★ ':''}${esc(p.name||'—')}${isLeaving?' ⏳':''}</span>`;
+    }
+
+    row.innerHTML = `
+      ${rankHtml}
+      <div>
+        ${nameHtml}
+        <div class="lb-expr" dir="ltr">${formatExpressionPreview(esc(p.expr||''))}</div>
+      </div>
+      <div class="lb-value ${valCls}" dir="ltr">${valStr}</div>`;
+    lbList.appendChild(row);
+    if (dir) setTimeout(()=>row.classList.remove('up','down'), 650);
+  });
+}
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── TOAST ────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  clearTimeout(toastTimer);
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
