@@ -629,29 +629,7 @@ function formatExpression(inputExpr) {
   return formatPlainNumber(inputExpr);
 }
 
-// ─── 💡 إنشاء دالة Debounce لتجنب البطء ──────────────────────────────────
-function debounce(func, wait) {
-  let timeout;
-  return function(...args) {
-    const context = this;
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(context, args), wait);
-  };
-}
-
 // ─── CALCULATOR LOGIC ────────────────────────────────────────────────────
-
-// 💡 تطبيق Debounce على التحديث (تأخير 150ms يمنع التقطيع أثناء الكتابة السريعة)
-const debouncedRefresh = debounce(function() {
-  exprEl.textContent = formatExpression(expr); 
-  setVal(expr || '0', false);
-}, 150);
-
-// 💡 تطبيق Debounce على الحساب (ضغطات متكررة على = لا تسبب بطء)
-const debouncedCalculate = debounce(function() {
-  calculateLogic();
-}, 200);
-
 document.getElementById('btnGrid').addEventListener('click', e => {
   const btn = e.target.closest('button');
   if (!btn) return;
@@ -662,20 +640,19 @@ document.getElementById('btnGrid').addEventListener('click', e => {
       } else {
           expr += btn.dataset.num;
       }
-      debouncedRefresh(); // استدعاء المحدث
+      refresh(); 
       return; 
   }
 
   if (btn.dataset.op   !== undefined) {
     expr += btn.dataset.op;
-    debouncedRefresh(); // استدعاء المحدث
-    return;
+    refresh(); return;
   }
 
   switch(btn.dataset.action) {
     case 'clear': expr=''; setVal('0',false); exprEl.textContent=''; break;
-    case 'back':  expr=expr.slice(0,-1); debouncedRefresh(); break;
-    case 'calc':  debouncedCalculate(); break;
+    case 'back':  expr=expr.slice(0,-1); refresh(); break;
+    case 'calc':  calculate(); break;
   }
 });
 
@@ -687,31 +664,46 @@ document.addEventListener('keydown', e => {
      } else {
         expr += e.key; 
      }
-     debouncedRefresh(); return;
+     refresh(); 
   }
-  else if (e.key==='+') { expr+='+'; debouncedRefresh(); return; }
-  else if (e.key==='-') { expr+='−'; debouncedRefresh(); return; }
-  else if (e.key==='*') { expr+='×'; debouncedRefresh(); return; }
-  else if (e.key==='/') { e.preventDefault(); expr+='÷'; debouncedRefresh(); return; }
-  else if (e.key==='Enter' || e.key==='=') debouncedCalculate();
-  else if (e.key==='Backspace') { expr=expr.slice(0,-1); debouncedRefresh(); }
+  else if (e.key==='+') { expr+='+'; refresh(); }
+  else if (e.key==='-') { expr+='−'; refresh(); }
+  else if (e.key==='*') { expr+='×'; refresh(); }
+  else if (e.key==='/') { e.preventDefault(); expr+='÷'; refresh(); }
+  else if (e.key==='Enter' || e.key==='=') calculate();
+  else if (e.key==='Backspace') { expr=expr.slice(0,-1); refresh(); }
   else if (e.key==='Escape') { expr=''; setVal('0',false); exprEl.textContent=''; }
 });
+
+function refresh() { 
+  exprEl.textContent = formatExpression(expr); 
+  setVal(expr || '0', false); 
+}
 
 // ─── 💡 دالة تعديل حجم الخط تلقائياً (يبدأ بالتصغير فقط بعد 12 خانة) ──────
 function autoScaleFont(element) {
     const textLength = element.textContent.length;
+    
+    // القاعدة الأساسية: 2rem
     let fontSize = 2; 
+    
+    // إذا زاد الطول عن 12، نبدأ بالتصغير تدريجياً
     if (textLength > 12) {
         fontSize = 2 - ((textLength - 12) * 0.15);
     }
+    
+    // منع الخط من أن يصبح صغيراً جداً (أقل من 0.8rem)
     if (fontSize < 0.8) fontSize = 0.8;
+    
     element.style.fontSize = fontSize + 'rem';
 }
 
 function setVal(v, colored) {
   valEl.textContent = formatExpression(v);
+  
+  // ✅ تطبيق خاصية تصغير الخط تلقائياً
   autoScaleFont(valEl);
+  
   valEl.className   = 'display-value';
   if (colored) {
     const n = parseFloat(v);
@@ -745,8 +737,7 @@ function formatExpressionPreview(inputExpr) {
   return result;
 }
 
-// ─── فصل منطق الحساب عن الاستدعاء المباشر ────────────────────────────────
-function calculateLogic() {
+function calculate() {
   if (!expr.trim()) return;
   try {
     const safe = expr.replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-')
@@ -763,9 +754,11 @@ function calculateLogic() {
     // ── عرض النتيجة مع فواصل الآلاف ──
     setVal(formatWithCommas(formatted), true);
 
+    // Save my value locally with 1-hour expiry
     saveMyValue(formatted, lastExpr);
     ignoreMyZero = false;
 
+    // Add to history with name
     const historyKey = myId + '|' + lastExpr + '|' + formatted;
     if (!knownExprs.has(historyKey)) {
       knownExprs.add(historyKey);
@@ -775,6 +768,7 @@ function calculateLogic() {
       renderHistory();
     }
 
+    // Update local & broadcast
     players[myId] = { name:myName, value:formatted, expr:lastExpr };
     renderLB();
     send({ type:'calc', value:formatted, expr:lastExpr });
