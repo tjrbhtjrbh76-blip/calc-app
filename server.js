@@ -59,7 +59,7 @@ main{width:100%;max-width:960px;padding:0 16px 40px;display:grid;grid-template-c
 .user-badge{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)}
 .user-badge strong{color:var(--accent);font-weight:700}
 
-/* ✅ صندوق العرض ثابت الحجم */
+/* ✅ تعديل حجم الصندوق ليكون ثابتاً والخط يتكيف */
 .display{background:#080810;margin:12px;border-radius:10px;border:1px solid var(--border);padding:14px 16px;height:90px;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;overflow:hidden;position:relative}
 
 .display-expr{font-size:.82rem;color:var(--muted);min-height:18px;word-break:break-all;text-align:left;direction:ltr;width:100%;margin-bottom:4px}
@@ -680,16 +680,16 @@ function refresh() {
   setVal(expr || '0', false); 
 }
 
-// ─── 💡 دالة تعديل حجم الخط تلقائياً (يبدأ بالتصغير فقط بعد 12 خانة) ──────
+// ─── 💡 دالة تعديل حجم الخط تلقائياً حسب طول النص ─────────────────────────
 function autoScaleFont(element) {
     const textLength = element.textContent.length;
     
     // القاعدة الأساسية: 2rem
     let fontSize = 2; 
     
-    // إذا زاد الطول عن 12، نبدأ بالتصغير تدريجياً
-    if (textLength > 12) {
-        fontSize = 2 - ((textLength - 12) * 0.15);
+    // إذا زاد الطول عن 7، نبدأ بالتصغير تدريجياً
+    if (textLength > 7) {
+        fontSize = 2 - ((textLength - 7) * 0.15);
     }
     
     // منع الخط من أن يصبح صغيراً جداً (أقل من 0.8rem)
